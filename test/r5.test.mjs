@@ -4,7 +4,8 @@ import { deploymentIdentity } from '../scripts/deployment-identity.mjs';
 import { runAttackChecks } from '../src/attack-check.mjs';
 
 const config = {
-  step: 1,
+  step: 2,
+  repoUrl: 'https://github.com/student-a/aleph-defense',
   judgeIssuer: 'https://aleph-judge-production.up.railway.app/defense/judge',
   sampleMarker: 'SAMPLE_NOTE_1',
   publicAppUrl: 'https://student-defense.vercel.app',
@@ -20,7 +21,7 @@ const env = {
 test('build identity uses Vercel Git and deployment metadata', () => {
   assert.deepEqual(deploymentIdentity(env, config), {
     schema: 'aleph.defense.deployment.v1',
-    step: 1,
+    step: 2,
     repoUrl: 'https://github.com/student-a/aleph-defense',
     commit: 'a'.repeat(40),
     publicAppUrl: 'https://student-defense-123.vercel.app',
@@ -31,26 +32,38 @@ test('build identity uses Vercel Git and deployment metadata', () => {
   assert.throws(() => deploymentIdentity({ ...env, VERCEL_GIT_COMMIT_SHA: 'short' }, config));
 });
 
-test('first attack check reads public data.json without credentials', async () => {
+test('stage-two self-check records static removal and the anonymous API weakness', async () => {
   const originalFetch = globalThis.fetch;
-  let requestUrl;
-  let options;
+  const requests = [];
   try {
     globalThis.fetch = async (url, init) => {
-      requestUrl = String(url);
-      options = init;
-      return new Response(JSON.stringify({ sampleMarker: 'SAMPLE_NOTE_1', notes: [{ title: '가상' }] }), {
-        status: 200,
-        headers: { 'content-type': 'application/json' },
-      });
+      const requestUrl = String(url);
+      requests.push(requestUrl);
+      if (requestUrl.endsWith('/')) return new Response('<main>자료실</main>', { status: 200 });
+      if (requestUrl.endsWith('/data.json')) return new Response('', { status: 404 });
+      if (requestUrl.endsWith('/api/notes')) return new Response(JSON.stringify({
+        notes: Array.from({ length: 4 }, () => ({ title: 'fixture', content: 'fixture' })),
+      }), { status: 200, headers: { 'content-type': 'application/json' } });
+      if (requestUrl.endsWith('/aleph.json')) return new Response(JSON.stringify({
+        schema: 'aleph.defense.deployment.v1', step: 2,
+        publicAppUrl: config.publicAppUrl,
+      }), { status: 200, headers: { 'content-type': 'application/json' } });
+      if (requestUrl === 'https://api.github.com/repos/student-a/aleph-defense') {
+        return new Response(JSON.stringify({ default_branch: 'main' }), { status: 200 });
+      }
+      if (requestUrl.endsWith('/git/trees/main?recursive=1')) {
+        return new Response(JSON.stringify({ tree: [] }), { status: 200 });
+      }
+      throw new Error('unexpected request');
     };
-    const [result] = await runAttackChecks(config);
-    assert.equal(requestUrl, 'https://student-defense.vercel.app/data.json');
-    assert.equal(options.redirect, 'error');
-    assert.match(result.observed, /확인 표시가 보임/u);
-    globalThis.fetch = async () => new Response('<html>not the data</html>', { status: 200 });
-    const [failed] = await runAttackChecks(config);
-    assert.match(failed.observed, /보이지 않음/u);
+    const results = await runAttackChecks(config);
+    assert.equal(results.find(item => item.attackId === 'deployed_static_scan').observed,
+      '정적 파일 검색 0건; /data.json HTTP 404');
+    assert.match(results.find(item => item.attackId === 'anonymous_public_api').observed,
+      /로그인 없이 API에서 가상 자료 4건/u);
+    assert.match(results.find(item => item.attackId === 'deployment_identity').observed,
+      /현재 단계·배포 주소 확인/u);
+    assert.ok(requests.includes('https://student-defense.vercel.app/api/notes'));
   } finally {
     globalThis.fetch = originalFetch;
   }
