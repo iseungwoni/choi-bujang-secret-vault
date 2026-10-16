@@ -3,50 +3,183 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>BYTE BACK | 점령된 자료실</title>
+  <title>BYTE BACK | 로그인 자료실</title>
   <style>
     :root { color-scheme: dark; font-family: system-ui, sans-serif; }
     body { margin: 0; min-height: 100vh; background: #101a28; color: #ecf4ff; }
-    main { max-width: 760px; margin: 0 auto; padding: 44px 22px 64px; }
-    .eyebrow { color: #8ad8df; font-size: 14px; font-weight: 700; letter-spacing: .08em; }
-    h1 { margin: 16px 0; font-size: clamp(30px, 7vw, 48px); line-height: 1.2; }
-    p { font-size: 17px; line-height: 1.7; color: #bfd0e5; }
-    .notice { margin: 26px 0; padding: 18px; border: 1px solid #d07384; border-radius: 14px; color: #ffe3e8; background: #612a3544; }
-    ul { list-style: none; display: grid; gap: 12px; padding: 0; }
-    li { border: 1px solid #51667c; border-radius: 14px; padding: 17px 19px; background: #1a2a3d; }
-    strong { display: block; font-size: 18px; margin-bottom: 5px; }
-    li span { color: #bfd0e5; }
+    main { max-width: 760px; margin: 0 auto; padding: 38px 22px 64px; }
+    h1 { margin: 12px 0; font-size: clamp(30px, 7vw, 46px); }
+    p { color: #bfd0e5; line-height: 1.6; }
+    .eyebrow { color: #8ad8df; font-weight: 700; letter-spacing: .08em; }
+    form, li, .panel { margin: 18px 0; padding: 18px; border: 1px solid #51667c; border-radius: 14px; background: #1a2a3d; }
+    label { display: block; margin: 10px 0; color: #bfd0e5; }
+    input, textarea { box-sizing: border-box; display: block; width: 100%; margin-top: 5px; padding: 11px; border: 1px solid #71869c; border-radius: 8px; color: #ecf4ff; background: #101a28; font: inherit; }
+    textarea { min-height: 110px; resize: vertical; }
+    button { margin: 8px 8px 0 0; padding: 10px 14px; border: 0; border-radius: 8px; color: #10202c; background: #8ad8df; font: inherit; font-weight: 700; cursor: pointer; }
+    button.secondary { color: #ecf4ff; background: #536a82; }
+    button.danger { color: #fff; background: #a44b60; }
+    #message { min-height: 1.5em; color: #ffd2dc; }
+    #notes { padding: 0; list-style: none; }
+    .note-title { font-size: 18px; font-weight: 700; }
+    .note-body { white-space: pre-wrap; color: #bfd0e5; }
+    [hidden] { display: none !important; }
   </style>
 </head>
 <body>
   <main>
-    <div class="eyebrow">BYTE BACK · 2단계 자료 보호</div>
+    <div class="eyebrow">BYTE BACK · 3단계 로그인 자료실</div>
     <h1>점령된 자료실</h1>
-    <p>아래 기록은 모두 실습을 위해 만든 가상 자료이며, 서버 함수가 학습용 Supabase 테이블에서 읽습니다.</p>
-    <div class="notice">자료는 정적 파일에서 제거했습니다. 다만 현재 공개 API 함수에는 로그인 확인이 없어 누구나 요청할 수 있습니다.</div>
-    <ul id="notes" aria-live="polite"><li>가상 자료를 불러오는 중입니다.</li></ul>
+    <p>가상 메모는 로그인한 뒤 서버 API에서 불러옵니다.</p>
+    <section id="setup" class="panel" hidden>
+      <h2>Supabase 공개 설정</h2>
+      <p>프로젝트 URL과 publishable key를 입력하면 이 브라우저에 저장됩니다. 서버 전용 키는 입력하지 마세요.</p>
+      <form id="config-form">
+        <label>Project URL<input id="project-url" type="url" placeholder="https://프로젝트.supabase.co" required></label>
+        <label>Publishable key<input id="publishable-key" type="text" autocomplete="off" required></label>
+        <button>이 브라우저에 저장</button>
+      </form>
+    </section>
+    <section id="login-panel" class="panel" hidden>
+      <form id="login-form">
+        <h2>이메일로 로그인</h2>
+        <label>이메일<input id="email" type="email" autocomplete="username" required></label>
+        <label>비밀번호<input id="password" type="password" autocomplete="current-password" required></label>
+        <button>로그인</button>
+      </form>
+    </section>
+    <section id="account" class="panel" hidden>
+      <p id="account-label"></p>
+      <button id="logout" class="secondary" type="button">로그아웃</button>
+    </section>
+    <p id="message" role="status" aria-live="polite"></p>
+    <section id="memo-area" hidden>
+      <h2>내 가상 메모</h2>
+      <form id="memo-form">
+        <input id="memo-id" type="hidden">
+        <label>제목<input id="memo-title" maxlength="160" required></label>
+        <label>내용<textarea id="memo-body" maxlength="12000" required></textarea></label>
+        <button id="save-memo">메모 추가</button>
+        <button id="cancel-edit" class="secondary" type="button" hidden>수정 취소</button>
+      </form>
+      <ul id="notes" aria-live="polite"></ul>
+    </section>
   </main>
   <script type="module">
-    const list = document.querySelector('#notes');
-    try {
-      const response = await fetch('/api/notes', { cache: 'no-store' });
-      if (!response.ok) throw new Error('자료를 불러올 수 없습니다. 서버 환경 변수와 학습용 테이블을 확인하세요.');
-      const data = await response.json();
-      if (!Array.isArray(data.notes)) throw new Error('자료 형식이 맞지 않습니다.');
-      list.replaceChildren(...data.notes.map(note => {
-        const item = document.createElement('li');
-        const title = document.createElement('strong');
-        const content = document.createElement('span');
-        title.textContent = note.title;
-        content.textContent = note.content;
-        item.append(title, content);
-        return item;
-      }));
-    } catch (error) {
-      const item = document.createElement('li');
-      item.textContent = error.message;
-      list.replaceChildren(item);
+    import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/+esm';
+
+    const $ = (selector) => document.querySelector(selector);
+    const setup = $('#setup');
+    const loginPanel = $('#login-panel');
+    const account = $('#account');
+    const memoArea = $('#memo-area');
+    const message = $('#message');
+    const configStorageKey = 'byte-back-supabase-public-config';
+    const suppliedProjectUrl = 'https://ppgczecwvisoboikhbmx.supabase.co';
+    const suppliedPublishableKey = 'sb_publishable_8i_bXPSIOrkMz4vr6v8-Gw_CVJi33wq';
+    let client;
+    let session;
+
+    function readConfig() {
+      try {
+        return JSON.parse(localStorage.getItem(configStorageKey) || 'null')
+          || { url: suppliedProjectUrl, key: suppliedPublishableKey };
+      } catch { return { url: suppliedProjectUrl, key: suppliedPublishableKey }; }
     }
+    function validConfig(value) {
+      try {
+        const url = new URL(value?.url);
+        return url.protocol === 'https:' && !url.username && !url.password && !url.search && !url.hash
+          && typeof value.key === 'string' && value.key.trim().length > 10;
+      } catch { return false; }
+    }
+    function paint() {
+      const signedIn = Boolean(session?.user);
+      setup.hidden = validConfig(readConfig());
+      loginPanel.hidden = !validConfig(readConfig()) || signedIn;
+      account.hidden = !signedIn;
+      memoArea.hidden = !signedIn;
+      $('#account-label').textContent = signedIn ? `로그인됨: ${session.user.email || '계정'}` : '';
+    }
+    function resetMemoForm() {
+      $('#memo-form').reset();
+      $('#memo-id').value = '';
+      $('#save-memo').textContent = '메모 추가';
+      $('#cancel-edit').hidden = true;
+    }
+    async function api(path, options = {}) {
+      const response = await fetch(path, {
+        ...options,
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}`, ...options.headers },
+        cache: 'no-store',
+      });
+      if (response.status === 204) return null;
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error === 'LOGIN_REQUIRED' ? '로그인이 필요합니다.' : `자료 API 오류 (${response.status}): ${data.error || '요청을 처리하지 못했습니다.'}`);
+      return data;
+    }
+    async function loadNotes() {
+      const list = $('#notes');
+      list.replaceChildren();
+      try {
+        const data = await api('/api/notes');
+        for (const note of data.notes) {
+          const item = document.createElement('li');
+          const title = document.createElement('div'); title.className = 'note-title'; title.textContent = note.title;
+          const body = document.createElement('p'); body.className = 'note-body'; body.textContent = note.body;
+          const edit = document.createElement('button'); edit.type = 'button'; edit.className = 'secondary'; edit.textContent = '수정';
+          edit.addEventListener('click', () => { $('#memo-id').value = note.id; $('#memo-title').value = note.title; $('#memo-body').value = note.body; $('#save-memo').textContent = '수정 저장'; $('#cancel-edit').hidden = false; $('#memo-title').focus(); });
+          const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'danger'; remove.textContent = '삭제';
+          remove.addEventListener('click', async () => { try { await api(`/api/notes/${encodeURIComponent(note.id)}`, { method: 'DELETE' }); message.textContent = '메모를 삭제했습니다.'; await loadNotes(); } catch (error) { message.textContent = error.message; } });
+          item.append(title, body, edit, remove); list.append(item);
+        }
+        if (!data.notes.length) { const empty = document.createElement('li'); empty.textContent = '등록된 메모가 없습니다.'; list.append(empty); }
+      } catch (error) { message.textContent = error.message; }
+    }
+    function initialize() {
+      const config = readConfig();
+      if (!validConfig(config)) {
+        client = null; session = null;
+        $('#publishable-key').value = suppliedPublishableKey;
+        paint(); return;
+      }
+      client = createClient(new URL(config.url).origin, config.key, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
+      client.auth.getSession().then(({ data }) => { session = data.session; paint(); if (session) loadNotes(); });
+      client.auth.onAuthStateChange((_event, nextSession) => { session = nextSession; paint(); message.textContent = session ? '' : '로그아웃되었습니다.'; if (session) loadNotes(); else $('#notes').replaceChildren(); });
+    }
+    $('#config-form').addEventListener('submit', (event) => {
+      event.preventDefault();
+      const url = $('#project-url').value.trim();
+      const key = $('#publishable-key').value.trim();
+      if (!validConfig({ url, key })) { message.textContent = 'HTTPS Project URL과 publishable key를 확인하세요.'; return; }
+      localStorage.setItem(configStorageKey, JSON.stringify({ url, key }));
+      message.textContent = '공개 설정을 저장했습니다.';
+      initialize();
+    });
+    $('#login-form').addEventListener('submit', async (event) => {
+      event.preventDefault(); message.textContent = '로그인 중입니다.';
+      try {
+        const { error } = await client.auth.signInWithPassword({ email: $('#email').value, password: $('#password').value });
+        message.textContent = error ? `로그인 실패: ${error.message}` : '로그인되었습니다.';
+      } catch (error) { message.textContent = `로그인 실패: ${error.message || '요청에 실패했습니다.'}`; }
+    });
+    $('#logout').addEventListener('click', async () => {
+      try {
+        const { error } = await client.auth.signOut();
+        message.textContent = error ? `로그아웃 실패: ${error.message}` : '로그아웃되었습니다.';
+      } catch (error) { message.textContent = `로그아웃 실패: ${error.message || '요청에 실패했습니다.'}`; }
+    });
+    $('#memo-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const id = $('#memo-id').value;
+      const payload = { title: $('#memo-title').value, body: $('#memo-body').value };
+      try {
+        await api(id ? `/api/notes/${encodeURIComponent(id)}` : '/api/notes', { method: id ? 'PUT' : 'POST', body: JSON.stringify(payload) });
+        message.textContent = id ? '메모를 수정했습니다.' : '메모를 추가했습니다.';
+        resetMemoForm(); await loadNotes();
+      } catch (error) { message.textContent = error.message; }
+    });
+    $('#cancel-edit').addEventListener('click', resetMemoForm);
+    initialize();
   </script>
 </body>
 </html>

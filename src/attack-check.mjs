@@ -100,7 +100,7 @@ export async function runAttackChecks(config) {
       // Do not include response bodies in the submission bundle.
     }
   }
-  results.push({ attackId: 'anonymous_public_api', expected: '익명 API 접근은 다음 단계에서 인증으로 제한',
+  results.push({ attackId: 'anonymous_public_api', expected: '인증 없는 API 요청은 JSON 오류로 거부',
     observed: notesApi.ok ? `로그인 없이 API에서 가상 자료 ${apiCount}건을 읽을 수 있음 (서버 키는 기록하지 않음)`
       : `로그인 없이 API에서 자료를 읽지 못함 (HTTP ${notesApi.status}; 서버 키는 기록하지 않음)` });
 

@@ -8,10 +8,10 @@ create table if not exists public.notes (
   content text not null
 );
 
-comment on column public.notes.owner_id is 'Reserved for a later stage; intentionally has no auth.users foreign key.';
+comment on column public.notes.owner_id is 'Set from the verified Supabase user ID. Row-level ownership checks are intentionally deferred to stage 4.';
 alter table public.notes enable row level security;
 revoke all privileges on table public.notes from anon, authenticated;
-grant select on table public.notes to service_role;
+grant select, insert, update, delete on table public.notes to service_role;
 
 insert into public.notes (id, title, content)
 values
